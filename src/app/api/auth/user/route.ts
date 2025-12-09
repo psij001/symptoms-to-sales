@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { storage } from "@/lib/db/storage";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await getCurrentUser();
   
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const user = await storage.getUser(session.claims.sub);
+    const user = await storage.getUser(session.userId);
     
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 });

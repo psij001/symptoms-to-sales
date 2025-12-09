@@ -3,28 +3,28 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { Separator } from '@/components/ui/separator'
 import { storage } from '@/lib/db/storage'
-import { getSession } from '@/lib/auth/session'
+import { getCurrentUser } from '@/lib/auth/session'
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getSession()
+  const session = await getCurrentUser()
 
   if (!session) {
     redirect('/login')
   }
 
-  const user = await storage.getUser(session.claims.sub)
+  const user = await storage.getUser(session.userId)
 
   return (
     <SidebarProvider>
       <AppSidebar
         user={{
-          email: session.claims.email || '',
-          name: user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : session.claims.first_name || undefined,
-          profileImageUrl: user?.profileImageUrl || session.claims.profile_image_url || undefined,
+          email: session.email,
+          name: user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : undefined,
+          profileImageUrl: user?.profileImageUrl || undefined,
         }}
       />
       <SidebarInset>

@@ -1,15 +1,14 @@
-import { getSession, type SessionData } from "./session";
-import type { UserSession } from "./replitAuth";
+import { getCurrentUser } from "./session";
 
-export async function getServerSession(): Promise<{ userId: string; session: UserSession } | null> {
-  const userSession = await getSession();
+export async function getServerSession(): Promise<{ userId: string; email: string } | null> {
+  const user = await getCurrentUser();
 
-  if (!userSession) {
+  if (!user) {
     return null;
   }
 
   return {
-    userId: userSession.claims.sub,
-    session: userSession,
+    userId: user.userId,
+    email: user.email,
   };
 }

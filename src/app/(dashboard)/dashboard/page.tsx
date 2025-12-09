@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Triangle, Mail, MessageSquare, ArrowRight } from 'lucide-react'
 import { storage } from '@/lib/db/storage'
-import { getSession } from '@/lib/auth/session'
+import { getCurrentUser } from '@/lib/auth/session'
 
 const tools = [
   {
@@ -30,12 +30,12 @@ const tools = [
 ]
 
 export default async function DashboardPage() {
-  const session = await getSession()
+  const session = await getCurrentUser()
   
   let firstName = 'there'
   if (session) {
-    const user = await storage.getUser(session.claims.sub)
-    firstName = user?.firstName || session.claims.first_name || 'there'
+    const user = await storage.getUser(session.userId)
+    firstName = user?.firstName || 'there'
   }
 
   return (
