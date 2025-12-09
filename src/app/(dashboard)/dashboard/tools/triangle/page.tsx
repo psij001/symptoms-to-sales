@@ -242,9 +242,9 @@ ${selectedMetaphor}`
   const hasCompleteResult = selectedSymptom && selectedWisdom && selectedMetaphor
 
   return (
-    <div className="flex w-full h-[calc(100vh-3.5rem)]">
+    <div className="grid grid-cols-[2fr_3fr] h-[calc(100vh-3.5rem)]">
       {/* Input Panel - 40% */}
-      <div className="w-2/5 min-w-0 shrink-0 border-r border-border p-6 overflow-y-auto">
+      <div className="border-r border-border p-6 overflow-y-auto">
         <div className="space-y-6">
           {/* Header */}
           <div className="space-y-2">
@@ -368,7 +368,7 @@ ${selectedMetaphor}`
       </div>
 
       {/* Output Panel - 60% */}
-      <div className="flex-1 min-w-0 p-6 overflow-y-auto bg-background-elevated">
+      <div className="p-6 overflow-y-auto bg-background-elevated">
         {/* Streaming Content */}
         {isGenerating && streamingContent && (
           <div className="space-y-4">
