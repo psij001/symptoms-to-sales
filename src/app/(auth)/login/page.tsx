@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 
@@ -49,5 +49,24 @@ export default function LoginPage() {
         </p>
       </CardContent>
     </Card>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <Card className="bg-background-elevated border-border">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-display text-text-primary">
+            Symptoms to Sales
+          </CardTitle>
+          <CardDescription className="text-text-secondary">
+            Loading...
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
