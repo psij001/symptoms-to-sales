@@ -196,8 +196,8 @@ export default function SubjectLinesPage() {
   }
 
   return (
-    <div className="grid grid-cols-[2fr_3fr] w-full h-[calc(100vh-3.5rem)]">
-      {/* Input Panel - 40% */}
+    <div className="grid grid-cols-[minmax(320px,400px)_1fr] w-full h-[calc(100vh-3.5rem)]">
+      {/* Input Panel */}
       <div className="min-w-0 border-r border-border p-6 overflow-y-auto">
         <div className="space-y-6">
           {/* Header */}
