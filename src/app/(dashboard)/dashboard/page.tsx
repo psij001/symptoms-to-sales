@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Triangle, Mail, MessageSquare, ArrowRight } from 'lucide-react'
+import { storage } from '@/lib/db/storage'
+import { getSession } from '@/lib/auth/session'
 
 const tools = [
   {
@@ -29,25 +30,16 @@ const tools = [
 ]
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const { data: profile } = user
-    ? (await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', user.id)
-        .single() as { data: { name: string | null } | null })
-    : { data: null }
-
-  const firstName = profile?.name?.split(' ')[0] || 'there'
+  const session = await getSession()
+  
+  let firstName = 'there'
+  if (session) {
+    const user = await storage.getUser(session.claims.sub)
+    firstName = user?.firstName || session.claims.first_name || 'there'
+  }
 
   return (
     <div className="p-6 space-y-8">
-      {/* Welcome Section */}
       <div className="space-y-2">
         <h1 className="text-display">
           Good {getGreeting()}, {firstName}
@@ -57,7 +49,6 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* Tools Grid */}
       <div className="space-y-4">
         <h2 className="text-caption text-text-tertiary">TOOLS</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -89,7 +80,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Context Status */}
       <div className="space-y-4">
         <h2 className="text-caption text-text-tertiary">CONTEXT</h2>
         <Card>

@@ -1,80 +1,77 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getIronSession, SessionOptions } from 'iron-session'
+import { cookies } from 'next/headers'
+
+interface SessionData {
+  user?: {
+    claims: {
+      sub: string;
+      email?: string;
+      exp?: number;
+    };
+    expires_at?: number;
+  };
+}
+
+const SESSION_OPTIONS: SessionOptions = {
+  password: process.env.SESSION_SECRET!,
+  cookieName: "auth_session",
+  cookieOptions: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 7 * 24 * 60 * 60,
+    path: "/",
+  },
+};
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  let isAuthenticated = false;
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
+  try {
+    const cookieStore = await cookies();
+    const session = await getIronSession<SessionData>(cookieStore, SESSION_OPTIONS);
+    
+    if (session.user?.expires_at) {
+      const now = Math.floor(Date.now() / 1000);
+      isAuthenticated = now <= session.user.expires_at;
     }
-  )
-
-  // Refresh session if expired
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  } catch {
+    isAuthenticated = false;
+  }
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/register')
-  const isCallback = request.nextUrl.pathname.startsWith('/auth/callback')
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
   const isPublicPage = request.nextUrl.pathname === '/'
 
-  // Allow callback to proceed
-  if (isCallback) {
-    return supabaseResponse
+  if (isApiRoute) {
+    return NextResponse.next()
   }
 
-  // Redirect unauthenticated users to login
-  if (!user && !isAuthPage && !isPublicPage) {
+  if (!isAuthenticated && !isAuthPage && !isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isAuthPage) {
+  if (isAuthenticated && isAuthPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users from root to dashboard
-  if (user && isPublicPage) {
+  if (isAuthenticated && isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
-  return supabaseResponse
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

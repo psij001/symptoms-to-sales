@@ -1,31 +1,17 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getServerSession } from '@/lib/auth/serverAuth'
 import { getClaudeClient, MODELS } from '@/lib/claude/client'
-import { buildSystemPrompt } from '@/lib/claude/context-builder'
 import {
   T1_SYSTEM_PROMPT,
   T1_GENERATION_PROMPT,
   EMAIL_TYPE_PROMPTS,
   type EmailTypeId,
 } from '@/lib/prompts/t1-email'
-import type { Project, VoiceDNA, OfferContext } from '@/types/database'
-
-type ProjectWithContext = Project & {
-  voice_dna: VoiceDNA[]
-  offer_contexts: OfferContext[]
-}
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Verify authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    const session = await getServerSession()
+    if (!session) {
       return new Response('Unauthorized', { status: 401 })
     }
 
@@ -37,10 +23,8 @@ export async function POST(request: NextRequest) {
       symptom,
       wisdom,
       metaphor,
-      projectId,
     } = body
 
-    // Validate required fields
     if (!emailType || !audience || !problem) {
       return new Response(
         'Missing required fields: emailType, audience, and problem',
@@ -48,7 +32,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate email type
     const validEmailTypes: EmailTypeId[] = [
       'rsvp',
       'hell-island',
@@ -62,47 +45,9 @@ export async function POST(request: NextRequest) {
       return new Response(`Invalid email type: ${emailType}`, { status: 400 })
     }
 
-    // Get project context if provided
-    let project: ProjectWithContext | null = null
-    let voiceDNA: VoiceDNA | null = null
-    let offerContext: OfferContext | null = null
-
-    if (projectId) {
-      const { data } = await supabase
-        .from('projects')
-        .select('*, voice_dna(*), offer_contexts(*)')
-        .eq('id', projectId)
-        .single()
-
-      if (data) {
-        const projectData = data as unknown as ProjectWithContext
-        project = projectData
-        voiceDNA =
-          projectData.voice_dna?.find((v) => v.is_active) ??
-          projectData.voice_dna?.[0] ??
-          null
-        offerContext =
-          projectData.offer_contexts?.find((o) => o.is_active) ??
-          projectData.offer_contexts?.[0] ??
-          null
-      }
-    }
-
-    // Get type-specific prompt
     const emailTypePrompt = EMAIL_TYPE_PROMPTS[emailType as EmailTypeId]
+    const systemPrompt = `${T1_SYSTEM_PROMPT}\n\n${emailTypePrompt}\n\n${T1_GENERATION_PROMPT}`
 
-    // Build system prompt with context
-    const toolPrompt = `${T1_SYSTEM_PROMPT}\n\n${emailTypePrompt}\n\n${T1_GENERATION_PROMPT}`
-    const systemPrompt = project
-      ? buildSystemPrompt({
-          project,
-          voiceDNA,
-          offerContext,
-          toolPrompt,
-        })
-      : toolPrompt
-
-    // Build user message with Triangle of Insight context
     let userMessage = `Target Audience: ${audience}
 
 Biggest Problem (Hell Island): ${problem}`
@@ -121,7 +66,6 @@ Biggest Problem (Hell Island): ${problem}`
 
     const claude = getClaudeClient()
 
-    // Create streaming response
     const stream = await claude.messages.create({
       model: MODELS.SONNET,
       max_tokens: 4000,
@@ -135,7 +79,6 @@ Biggest Problem (Hell Island): ${problem}`
       ],
     })
 
-    // Return as streaming response
     const encoder = new TextEncoder()
     const readableStream = new ReadableStream({
       async start(controller) {

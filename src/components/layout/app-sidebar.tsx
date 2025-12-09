@@ -14,7 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +32,6 @@ import {
   ChevronUp,
   Home,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 
 const tools = [
   {
@@ -78,18 +76,15 @@ interface AppSidebarProps {
   user: {
     email: string
     name?: string | null
+    profileImageUrl?: string | null
   }
 }
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+  const handleSignOut = () => {
+    window.location.href = '/api/logout'
   }
 
   const initials = user.name
@@ -161,6 +156,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton className="w-full">
                   <Avatar className="h-6 w-6">
+                    {user.profileImageUrl && (
+                      <AvatarImage src={user.profileImageUrl} alt={user.name || user.email} />
+                    )}
                     <AvatarFallback className="bg-accent text-accent-foreground text-xs">
                       {initials}
                     </AvatarFallback>

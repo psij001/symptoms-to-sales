@@ -1,37 +1,30 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { Separator } from '@/components/ui/separator'
+import { storage } from '@/lib/db/storage'
+import { getSession } from '@/lib/auth/session'
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
+  const session = await getSession()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (!session) {
     redirect('/login')
   }
 
-  // Get profile for name
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name')
-    .eq('id', user.id)
-    .single() as { data: { name: string | null } | null }
+  const user = await storage.getUser(session.claims.sub)
 
   return (
     <SidebarProvider>
       <AppSidebar
         user={{
-          email: user.email || '',
-          name: profile?.name,
+          email: session.claims.email || '',
+          name: user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : session.claims.first_name || undefined,
+          profileImageUrl: user?.profileImageUrl || session.claims.profile_image_url || undefined,
         }}
       />
       <SidebarInset>
