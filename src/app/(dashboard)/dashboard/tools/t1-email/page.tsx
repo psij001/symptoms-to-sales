@@ -175,9 +175,9 @@ export default function T1EmailCreatorPage() {
   const selectedEmailType = EMAIL_TYPES.find((t) => t.id === selectedType)
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex w-full h-[calc(100vh-3.5rem)]">
       {/* Input Panel - 40% */}
-      <div className="w-[40%] border-r border-border p-6 overflow-y-auto">
+      <div className="w-2/5 min-w-0 shrink-0 border-r border-border p-6 overflow-y-auto">
         <div className="space-y-6">
           {/* Header */}
           <div className="space-y-2">
@@ -413,7 +413,7 @@ export default function T1EmailCreatorPage() {
       </div>
 
       {/* Output Panel - 60% */}
-      <div className="w-[60%] p-6 overflow-y-auto bg-background-elevated">
+      <div className="flex-1 min-w-0 p-6 overflow-y-auto bg-background-elevated">
         {/* Streaming Content */}
         {isGenerating && streamingContent && (
           <div className="space-y-4">
