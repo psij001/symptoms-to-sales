@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Triangle, Mail, MessageSquare, ArrowRight } from 'lucide-react'
 import { storage } from '@/lib/db/storage'
 import { getCurrentUser } from '@/lib/auth/session'
+import { CreateProjectModal } from '@/components/dashboard/create-project-modal'
 
 const tools = [
   {
@@ -93,9 +94,7 @@ export default async function DashboardPage() {
                   Create a project to add Voice DNA and Offer Context
                 </p>
               </div>
-              <Button variant="outline" size="sm">
-                Create Project
-              </Button>
+              <CreateProjectModal />
             </div>
           </CardContent>
         </Card>

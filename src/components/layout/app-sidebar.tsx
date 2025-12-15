@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -93,14 +94,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <Sidebar className="border-r border-sidebar-border">
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
-            <Triangle className="h-4 w-4 text-accent-foreground" />
-          </div>
-          <span className="font-serif text-lg font-medium text-sidebar-foreground">
-            S2S
-          </span>
+      <SidebarHeader className="border-b border-sidebar-border px-2 py-3">
+        <Link href="/dashboard" className="flex items-center">
+          <Image
+            src="/s2s-logo.png"
+            alt="Symptoms to Sales"
+            width={200}
+            height={100}
+            className="w-full max-w-[180px]"
+            priority
+          />
         </Link>
       </SidebarHeader>
 
