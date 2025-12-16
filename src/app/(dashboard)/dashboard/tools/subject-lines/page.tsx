@@ -196,9 +196,9 @@ export default function SubjectLinesPage() {
   }
 
   return (
-    <div className="grid grid-cols-[2fr_3fr] w-full h-[calc(100vh-3.5rem)]">
+    <div className="tool-layout h-[calc(100vh-3.5rem)]">
       {/* Input Panel */}
-      <div className="min-w-0 border-r border-border p-6 overflow-y-auto">
+      <div className="border-r border-border p-6 overflow-y-auto">
         <div className="space-y-6">
           {/* Header */}
           <div className="space-y-2">
@@ -335,7 +335,7 @@ export default function SubjectLinesPage() {
       </div>
 
       {/* Output Panel - 60% */}
-      <div className="min-w-0 p-6 overflow-y-auto bg-background-elevated">
+      <div className="p-6 overflow-y-auto bg-background-elevated">
         {/* Streaming Content */}
         {isGenerating && streamingContent && (
           <div className="space-y-4">

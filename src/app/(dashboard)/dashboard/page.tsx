@@ -31,17 +31,20 @@ const tools = [
 ]
 
 export default async function DashboardPage() {
-  const session = await getCurrentUser()
-  
+  const isDev = process.env.NODE_ENV === 'development'
+
   let firstName = 'there'
-  if (session) {
-    const user = await storage.getUser(session.userId)
-    firstName = user?.firstName || 'there'
+  if (!isDev) {
+    const session = await getCurrentUser()
+    if (session) {
+      const user = await storage.getUser(session.userId)
+      firstName = user?.firstName || 'there'
+    }
   }
 
   return (
     <div className="p-6 space-y-8">
-      <div className="space-y-2">
+      <div className="space-y-2 animate-header-entrance">
         <h1 className="text-display">
           Good {getGreeting()}, {firstName}
         </h1>
@@ -50,18 +53,18 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 animate-section-entrance" style={{ animationDelay: '100ms' }}>
         <h2 className="text-caption text-text-tertiary">TOOLS</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => (
+          {tools.map((tool, index) => (
             <Link key={tool.title} href={tool.href}>
-              <Card className="h-full transition-colors hover:border-border-hover group cursor-pointer">
+              <Card className={`h-full card-premium group cursor-pointer animate-card-entrance stagger-${index + 1}`}>
                 <CardHeader>
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg bg-surface ${tool.color}`}>
                       <tool.icon className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-h3">{tool.title}</CardTitle>
+                    <CardTitle className="font-serif text-lg font-semibold">{tool.title}</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -81,9 +84,9 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 animate-section-entrance" style={{ animationDelay: '300ms' }}>
         <h2 className="text-caption text-text-tertiary">CONTEXT</h2>
-        <Card>
+        <Card className="transition-all duration-300 hover:border-border-hover">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
