@@ -567,6 +567,38 @@ body {
   color: var(--color-project-client);
 }
 
+/* Project Type Background Colors with Opacity */
+.bg-project-personal\/10 {
+  background-color: rgba(232, 168, 84, 0.1);
+}
+
+.bg-project-partner\/10 {
+  background-color: rgba(91, 163, 112, 0.1);
+}
+
+.bg-project-client\/10 {
+  background-color: rgba(74, 158, 219, 0.1);
+}
+
+/* Step Connector Styles */
+.step-connector {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0;
+}
+
+.step-connector-line {
+  width: 2px;
+  height: 24px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--color-border) 0,
+    var(--color-border) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

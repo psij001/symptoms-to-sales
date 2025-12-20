@@ -1,11 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
-const GOOGLE_REDIRECT_URI = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/api/auth/google/callback`
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Dynamically determine the redirect URI based on the current host
+  const headersList = await headers()
+  const host = headersList.get('host') || 'localhost:5000'
+  const protocol = headersList.get('x-forwarded-proto') || 'https'
+  const GOOGLE_REDIRECT_URI = `${protocol}://${host}/api/auth/google/callback`
   if (!GOOGLE_CLIENT_ID) {
     return NextResponse.json(
       { error: 'Google OAuth is not configured' },

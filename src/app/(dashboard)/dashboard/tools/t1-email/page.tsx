@@ -18,9 +18,11 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
+  Fingerprint,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EMAIL_TYPES, type EmailTypeId } from '@/lib/prompts/t1-email'
+import { VoiceDNAUploader } from '@/components/voice-dna/voice-dna-uploader'
 
 interface EmailDraft {
   subject: string
@@ -38,6 +40,11 @@ export default function T1EmailCreatorPage() {
   const [wisdom, setWisdom] = useState('')
   const [metaphor, setMetaphor] = useState('')
   const [showTriangleInputs, setShowTriangleInputs] = useState(false)
+
+  // Voice DNA state
+  const [voiceDNAContent, setVoiceDNAContent] = useState<string | null>(null)
+  const [voiceDNAFileName, setVoiceDNAFileName] = useState<string | null>(null)
+  const [showVoiceDNA, setShowVoiceDNA] = useState(false)
 
   // Generated content
   const [drafts, setDrafts] = useState<EmailDraft[]>([])
@@ -116,6 +123,7 @@ export default function T1EmailCreatorPage() {
           symptom: symptom.trim() || undefined,
           wisdom: wisdom.trim() || undefined,
           metaphor: metaphor.trim() || undefined,
+          voiceDNAContent: voiceDNAContent || undefined,
         }),
       })
 
@@ -170,6 +178,19 @@ export default function T1EmailCreatorPage() {
     setStreamingContent('')
     setError(null)
     setShowTriangleInputs(false)
+    // Note: Don't reset Voice DNA - keep it for reuse
+  }
+
+  // Handle Voice DNA upload
+  const handleVoiceDNAUpload = (content: string, fileName: string) => {
+    setVoiceDNAContent(content)
+    setVoiceDNAFileName(fileName)
+  }
+
+  // Clear Voice DNA
+  const handleVoiceDNAClear = () => {
+    setVoiceDNAContent(null)
+    setVoiceDNAFileName(null)
   }
 
   const selectedEmailType = EMAIL_TYPES.find((t) => t.id === selectedType)
@@ -276,6 +297,48 @@ export default function T1EmailCreatorPage() {
                   disabled={isGenerating}
                   className="min-h-[80px]"
                 />
+              </div>
+
+              {/* Voice DNA (Optional) */}
+              <div className="border border-border rounded-lg">
+                <button
+                  onClick={() => setShowVoiceDNA(!showVoiceDNA)}
+                  className="w-full flex items-center justify-between p-3 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Fingerprint className="h-4 w-4 text-text-secondary" />
+                    <span className="text-sm font-medium text-text-primary">
+                      Voice DNA
+                    </span>
+                    {voiceDNAContent ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-xs text-text-tertiary">(Optional)</span>
+                    )}
+                  </div>
+                  {showVoiceDNA ? (
+                    <ChevronUp className="h-4 w-4 text-text-secondary" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-text-secondary" />
+                  )}
+                </button>
+
+                {showVoiceDNA && (
+                  <div className="px-3 pb-3 border-t border-border pt-3">
+                    <p className="text-xs text-text-tertiary mb-3">
+                      Upload your Voice DNA to generate emails in your unique writing style
+                    </p>
+                    <VoiceDNAUploader
+                      currentContent={voiceDNAContent}
+                      currentSource={voiceDNAFileName || undefined}
+                      onUpload={handleVoiceDNAUpload}
+                      onClear={handleVoiceDNAClear}
+                      isLoading={isGenerating}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Triangle of Insight Inputs (Optional) */}

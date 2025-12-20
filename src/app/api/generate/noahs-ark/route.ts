@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from '@/lib/auth/serverAuth'
 import { getClaudeClient, MODELS } from '@/lib/claude/client'
 import {
-  T1_SYSTEM_PROMPT,
-  T1_GENERATION_PROMPT,
-  EMAIL_TYPE_PROMPTS,
-  type EmailTypeId,
-} from '@/lib/prompts/t1-email'
+  NOAHS_ARK_SYSTEM_PROMPT,
+  NOAHS_ARK_EMAIL_PROMPTS,
+  NOAHS_ARK_CAMPAIGN_PROMPT,
+  type NoahsArkEmailTypeId,
+} from '@/lib/prompts/noahs-ark'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,72 +19,83 @@ export async function POST(request: NextRequest) {
     const {
       emailType,
       audience,
-      problem,
+      storm,
+      ark,
+      scarcity,
       symptom,
       wisdom,
       metaphor,
       voiceDNAContent,
     } = body
 
-    if (!emailType || !audience || !problem) {
+    if (!emailType || !audience || !storm || !ark) {
       return new Response(
-        'Missing required fields: emailType, audience, and problem',
+        'Missing required fields: emailType, audience, storm, and ark',
         { status: 400 }
       )
     }
 
-    const validEmailTypes: EmailTypeId[] = [
-      'rsvp',
-      'hell-island',
-      'heaven-island',
-      'mechanism',
-      'shark-killer',
-      'fence-tipper',
-      'pre-t1',
+    const validEmailTypes: NoahsArkEmailTypeId[] = [
+      'storm-warning',
+      'proof-points',
+      'ark-reveal',
+      'passenger-profiles',
+      'boarding-call',
+      'urgency-escalation',
+      'final-call',
     ]
+
     if (!validEmailTypes.includes(emailType)) {
       return new Response(`Invalid email type: ${emailType}`, { status: 400 })
     }
 
-    const emailTypePrompt = EMAIL_TYPE_PROMPTS[emailType as EmailTypeId]
+    const emailTypePrompt = NOAHS_ARK_EMAIL_PROMPTS[emailType as NoahsArkEmailTypeId]
 
     // Build system prompt with optional Voice DNA
-    let systemPrompt = `${T1_SYSTEM_PROMPT}\n\n${emailTypePrompt}\n\n${T1_GENERATION_PROMPT}`
+    let systemPrompt = `${NOAHS_ARK_SYSTEM_PROMPT}\n\n${emailTypePrompt}\n\n${NOAHS_ARK_CAMPAIGN_PROMPT}`
 
     if (voiceDNAContent && typeof voiceDNAContent === 'string' && voiceDNAContent.trim()) {
       systemPrompt += `\n\n## VOICE DNA - CRITICAL WRITING STYLE INSTRUCTIONS
 
-The following Voice DNA document describes the exact writing voice and style to use for these emails.
-You MUST follow these voice and style guidelines carefully to ensure the output sounds authentic and matches the specified voice.
+The following Voice DNA document describes the exact writing voice and style to use for this email.
+You MUST follow these voice and style guidelines carefully to ensure the output sounds authentic.
 
 ---
 ${voiceDNAContent.trim()}
 ---
 
-Apply these voice characteristics throughout all 3 email drafts. The emails should sound like they were written by the person described in the Voice DNA.`
+Apply these voice characteristics throughout the email. It should sound like it was written by the person described in the Voice DNA.`
     }
 
-    let userMessage = `Target Audience: ${audience}
+    let userMessage = `## CAMPAIGN DETAILS
 
-Biggest Problem (Hell Island): ${problem}`
+**Target Audience:** ${audience}
+
+**The Storm (Crisis/Change):** ${storm}
+
+**The Ark (Your Solution):** ${ark}`
+
+    if (scarcity) {
+      userMessage += `\n\n**Scarcity/Limits:** ${scarcity}`
+    }
 
     if (symptom) {
-      userMessage += `\n\nSelected Symptom: "${symptom}"`
+      userMessage += `\n\n**Symptom (from Triangle of Insight):** "${symptom}"`
     }
     if (wisdom) {
-      userMessage += `\n\nCounterIntuitive Wisdom: "${wisdom}"`
+      userMessage += `\n\n**Wisdom (from Triangle of Insight):** "${wisdom}"`
     }
     if (metaphor) {
-      userMessage += `\n\nBridge Metaphor: "${metaphor}"`
+      userMessage += `\n\n**Metaphor (from Triangle of Insight):** "${metaphor}"`
     }
 
-    userMessage += `\n\nGenerate 3 distinct T1 email drafts of the ${emailType.toUpperCase()} type now.`
+    userMessage += `\n\nGenerate the ${emailType.toUpperCase().replace(/-/g, ' ')} email for this Noah's Ark campaign now.`
 
     const claude = getClaudeClient()
 
     const stream = await claude.messages.create({
       model: MODELS.SONNET,
-      max_tokens: 4000,
+      max_tokens: 2000,
       stream: true,
       system: systemPrompt,
       messages: [
@@ -121,7 +132,7 @@ Biggest Problem (Hell Island): ${problem}`
       },
     })
   } catch (error) {
-    console.error('Error generating T1 email:', error)
+    console.error('Error generating Noah\'s Ark email:', error)
     return new Response(
       error instanceof Error ? error.message : 'Internal server error',
       { status: 500 }

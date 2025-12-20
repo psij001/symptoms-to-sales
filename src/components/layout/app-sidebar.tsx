@@ -32,7 +32,18 @@ import {
   LogOut,
   ChevronUp,
   Home,
+  Ship,
+  Fingerprint,
 } from 'lucide-react'
+
+const strategyTools = [
+  {
+    title: "Noah's Ark",
+    url: '/dashboard/tools/noahs-ark',
+    icon: Ship,
+    description: '7-email urgency campaign',
+  },
+]
 
 const tools = [
   {
@@ -52,6 +63,15 @@ const tools = [
     url: '/dashboard/tools/subject-lines',
     icon: MessageSquare,
     description: '10 attention-grabbing headlines',
+  },
+]
+
+const setupTools = [
+  {
+    title: 'Voice DNA Generator',
+    url: '/dashboard/tools/voice-dna-generator',
+    icon: Fingerprint,
+    description: 'Create your Voice DNA',
   },
 ]
 
@@ -109,10 +129,54 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Strategy</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {strategyTools.map((tool) => (
+                <SidebarMenuItem key={tool.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === tool.url}
+                    tooltip={tool.description}
+                  >
+                    <Link href={tool.url}>
+                      <tool.icon className="h-4 w-4" />
+                      <span>{tool.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel>Tools</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {tools.map((tool) => (
+                <SidebarMenuItem key={tool.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === tool.url}
+                    tooltip={tool.description}
+                  >
+                    <Link href={tool.url}>
+                      <tool.icon className="h-4 w-4" />
+                      <span>{tool.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Setup</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {setupTools.map((tool) => (
                 <SidebarMenuItem key={tool.title}>
                   <SidebarMenuButton
                     asChild

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { eq, or } from 'drizzle-orm'
@@ -7,7 +7,6 @@ import { setSession } from '@/lib/auth/session'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const GOOGLE_REDIRECT_URI = `${process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'}/api/auth/google/callback`
 
 interface GoogleTokenResponse {
   access_token: string
@@ -34,7 +33,12 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
 
-  const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:5000'
+  // Dynamically determine URLs based on the current host
+  const headersList = await headers()
+  const host = headersList.get('host') || 'localhost:5000'
+  const protocol = headersList.get('x-forwarded-proto') || 'https'
+  const baseUrl = `${protocol}://${host}`
+  const redirectUri = `${baseUrl}/api/auth/google/callback`
 
   if (error) {
     return NextResponse.redirect(`${baseUrl}/login?error=google_auth_denied`)
@@ -65,7 +69,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
     })
