@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -35,6 +36,7 @@ import {
   Ship,
   Fingerprint,
 } from 'lucide-react'
+import { SettingsModal } from '@/components/dashboard/settings-modal'
 
 const strategyTools = [
   {
@@ -86,11 +88,6 @@ const navigation = [
     url: '/dashboard/outputs',
     icon: FolderOpen,
   },
-  {
-    title: 'Settings',
-    url: '/dashboard/settings',
-    icon: Settings,
-  },
 ]
 
 interface AppSidebarProps {
@@ -103,6 +100,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleSignOut = () => {
     window.location.href = '/api/logout'
@@ -211,6 +209,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => setSettingsOpen(true)}>
+                  <Settings className="h-4 w-4" />
+                  <span>Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -238,11 +242,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 side="top"
                 className="w-[--radix-popper-anchor-width]"
               >
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/settings">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
+                <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
@@ -254,6 +256,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
     </Sidebar>
   )
 }
