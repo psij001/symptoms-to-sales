@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,6 +17,7 @@ import {
   Download,
   Copy,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VOICE_DNA_STEPS } from '@/lib/prompts/voice-dna-generator'
@@ -27,7 +28,13 @@ interface WritingSample {
   content: string
   voiceAnalysis?: string
   styleAnalysis?: string
+  analysisError?: string
 }
+
+// Constants for timeout and retry
+const TIMEOUT_MS = 120000 // 2 minutes
+const MAX_RETRIES = 1
+const STATE_UPDATE_INTERVAL_MS = 300 // Batch state updates
 
 type StepId = 'upload' | 'voice' | 'style' | 'generate'
 
@@ -41,6 +48,9 @@ export default function VoiceDNAGeneratorPage() {
   const [finalVoiceDNA, setFinalVoiceDNA] = useState('')
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [processingPhase, setProcessingPhase] = useState('')
+  const [failedSamples, setFailedSamples] = useState<string[]>([])
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const currentStepIndex = VOICE_DNA_STEPS.findIndex((s) => s.id === currentStep)
   const progress = ((currentStepIndex + 1) / VOICE_DNA_STEPS.length) * 100
@@ -127,165 +137,348 @@ export default function VoiceDNAGeneratorPage() {
     setSamples((prev) => prev.filter((s) => s.id !== id))
   }
 
-  // Analysis functions
-  const analyzeVoice = async () => {
-    setIsProcessing(true)
-    setError('')
+  // Helper function to read stream with timeout and batched updates
+  const readStreamWithTimeout = async (
+    response: Response,
+    timeoutMs: number,
+    signal: AbortSignal,
+    onProgress?: (data: string) => void
+  ): Promise<{ success: boolean; data: string; error?: string; timedOut?: boolean }> => {
+    const reader = response.body?.getReader()
+    if (!reader) {
+      return { success: false, data: '', error: 'No response stream' }
+    }
+
+    const decoder = new TextDecoder()
+    let accumulated = ''
+    let lastUpdate = Date.now()
 
     try {
-      for (let i = 0; i < samples.length; i++) {
-        setProcessingIndex(i)
-        const sample = samples[i]
+      while (true) {
+        // Create a timeout promise that rejects
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+        })
+
+        // Race between read and timeout
+        const readResult = await Promise.race([
+          reader.read(),
+          timeoutPromise
+        ])
+
+        if (signal.aborted) {
+          reader.cancel()
+          return { success: false, data: accumulated, error: 'Aborted' }
+        }
+
+        const { done, value } = readResult as ReadableStreamReadResult<Uint8Array>
+        if (done) break
+
+        accumulated += decoder.decode(value, { stream: true })
+
+        // Batched state updates (every 300ms)
+        if (onProgress && Date.now() - lastUpdate > STATE_UPDATE_INTERVAL_MS) {
+          onProgress(accumulated)
+          lastUpdate = Date.now()
+        }
+      }
+
+      // Final update
+      if (onProgress) {
+        onProgress(accumulated)
+      }
+
+      return { success: true, data: accumulated }
+    } catch (err) {
+      reader.cancel()
+      if (err instanceof Error && err.message === 'TIMEOUT') {
+        return { success: false, data: accumulated, error: 'Request timed out', timedOut: true }
+      }
+      return { success: false, data: accumulated, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  }
+
+  // Cancel ongoing analysis
+  const cancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setIsProcessing(false)
+      setProcessingPhase('')
+      setError('Analysis cancelled')
+    }
+  }
+
+  // Analyze a single sample with retry logic
+  const analyzeSampleWithRetry = async (
+    sample: WritingSample,
+    analysisType: 'voice' | 'style',
+    onPartialUpdate: (analysis: string) => void
+  ): Promise<{ success: boolean; data: string; error?: string }> => {
+    let attempts = 0
+    const field = analysisType === 'voice' ? 'voiceAnalysis' : 'styleAnalysis'
+
+    while (attempts <= MAX_RETRIES) {
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
+      try {
+        setProcessingPhase(
+          attempts > 0
+            ? `Retrying ${analysisType} analysis (attempt ${attempts + 1})...`
+            : analysisType === 'voice'
+              ? 'Identifying voice patterns...'
+              : 'Analyzing style categories...'
+        )
 
         const response = await fetch('/api/generate/voice-dna/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sampleContent: sample.content,
-            analysisType: 'voice',
+            analysisType,
           }),
+          signal: controller.signal,
         })
 
         if (!response.ok) {
           throw new Error(`Failed to analyze sample: ${sample.name}`)
         }
 
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('No response stream')
+        setProcessingPhase(
+          analysisType === 'voice' ? 'Extracting voice traits...' : 'Categorizing style attributes...'
+        )
 
-        let analysis = ''
-        const decoder = new TextDecoder()
+        const result = await readStreamWithTimeout(
+          response,
+          TIMEOUT_MS,
+          controller.signal,
+          (accumulated) => {
+            onPartialUpdate(accumulated)
+            setSamples((prev) =>
+              prev.map((s) =>
+                s.id === sample.id ? { ...s, [field]: accumulated } : s
+              )
+            )
+          }
+        )
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          analysis += decoder.decode(value, { stream: true })
+        if (result.success) {
+          return { success: true, data: result.data }
+        }
 
-          // Update sample with partial analysis
+        // If timed out and we have retries left
+        if (result.timedOut && attempts < MAX_RETRIES) {
+          attempts++
+          continue
+        }
+
+        return { success: false, data: result.data, error: result.error }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return { success: false, data: '', error: 'Cancelled' }
+        }
+        if (attempts < MAX_RETRIES) {
+          attempts++
+          continue
+        }
+        return {
+          success: false,
+          data: '',
+          error: err instanceof Error ? err.message : 'Analysis failed'
+        }
+      }
+    }
+
+    return { success: false, data: '', error: 'Max retries exceeded' }
+  }
+
+  // Analysis functions
+  const analyzeVoice = async () => {
+    setIsProcessing(true)
+    setError('')
+    setFailedSamples([])
+    setProcessingPhase('Starting voice analysis...')
+
+    const failedIds: string[] = []
+
+    try {
+      for (let i = 0; i < samples.length; i++) {
+        setProcessingIndex(i)
+        const sample = samples[i]
+
+        const result = await analyzeSampleWithRetry(sample, 'voice', () => {})
+
+        if (!result.success) {
+          failedIds.push(sample.id)
           setSamples((prev) =>
             prev.map((s) =>
-              s.id === sample.id ? { ...s, voiceAnalysis: analysis } : s
+              s.id === sample.id
+                ? { ...s, analysisError: result.error || 'Analysis failed' }
+                : s
             )
           )
+          continue // Continue with other samples
         }
       }
 
+      // Check if any samples failed
+      if (failedIds.length > 0) {
+        setFailedSamples(failedIds)
+        const successCount = samples.length - failedIds.length
+
+        if (successCount === 0) {
+          setError(`All ${failedIds.length} sample(s) failed to analyze. Click retry to try again.`)
+          return
+        }
+      }
+
+      // Get successful analyses for consolidation
+      const successfulVoiceTraits = samples
+        .filter((s) => !failedIds.includes(s.id) && s.voiceAnalysis)
+        .map((s) => s.voiceAnalysis) as string[]
+
+      if (successfulVoiceTraits.length === 0) {
+        setError('No samples were successfully analyzed')
+        return
+      }
+
       // Consolidate voice traits
-      const allVoiceTraits = samples
-        .map((s) => s.voiceAnalysis)
-        .filter(Boolean) as string[]
+      setProcessingPhase('Consolidating voice traits...')
+      const controller = new AbortController()
+      abortControllerRef.current = controller
 
       const consolidateResponse = await fetch('/api/generate/voice-dna/consolidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           consolidationType: 'voice',
-          voiceTraits: allVoiceTraits,
+          voiceTraits: successfulVoiceTraits,
         }),
+        signal: controller.signal,
       })
 
       if (!consolidateResponse.ok) {
         throw new Error('Failed to consolidate voice traits')
       }
 
-      const reader = consolidateResponse.body?.getReader()
-      if (!reader) throw new Error('No response stream')
+      const consolidateResult = await readStreamWithTimeout(
+        consolidateResponse,
+        TIMEOUT_MS,
+        controller.signal,
+        setConsolidatedVoice
+      )
 
-      let consolidated = ''
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        consolidated += decoder.decode(value, { stream: true })
-        setConsolidatedVoice(consolidated)
+      if (!consolidateResult.success) {
+        throw new Error(consolidateResult.error || 'Failed to consolidate voice traits')
       }
 
+      setProcessingPhase('')
       setCurrentStep('style')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed')
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Analysis was cancelled')
+      } else {
+        setError(err instanceof Error ? err.message : 'Analysis failed')
+      }
     } finally {
       setIsProcessing(false)
+      setProcessingPhase('')
+      abortControllerRef.current = null
     }
   }
 
   const analyzeStyle = async () => {
     setIsProcessing(true)
     setError('')
+    setFailedSamples([])
+    setProcessingPhase('Starting style analysis...')
+
+    const failedIds: string[] = []
 
     try {
       for (let i = 0; i < samples.length; i++) {
         setProcessingIndex(i)
         const sample = samples[i]
 
-        const response = await fetch('/api/generate/voice-dna/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sampleContent: sample.content,
-            analysisType: 'style',
-          }),
-        })
+        const result = await analyzeSampleWithRetry(sample, 'style', () => {})
 
-        if (!response.ok) {
-          throw new Error(`Failed to analyze sample: ${sample.name}`)
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('No response stream')
-
-        let analysis = ''
-        const decoder = new TextDecoder()
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          analysis += decoder.decode(value, { stream: true })
-
+        if (!result.success) {
+          failedIds.push(sample.id)
           setSamples((prev) =>
             prev.map((s) =>
-              s.id === sample.id ? { ...s, styleAnalysis: analysis } : s
+              s.id === sample.id
+                ? { ...s, analysisError: result.error || 'Analysis failed' }
+                : s
             )
           )
+          continue // Continue with other samples
         }
       }
 
+      // Check if any samples failed
+      if (failedIds.length > 0) {
+        setFailedSamples(failedIds)
+        const successCount = samples.length - failedIds.length
+
+        if (successCount === 0) {
+          setError(`All ${failedIds.length} sample(s) failed to analyze. Click retry to try again.`)
+          return
+        }
+      }
+
+      // Get successful analyses for consolidation
+      const successfulStyleTraits = samples
+        .filter((s) => !failedIds.includes(s.id) && s.styleAnalysis)
+        .map((s) => s.styleAnalysis) as string[]
+
+      if (successfulStyleTraits.length === 0) {
+        setError('No samples were successfully analyzed')
+        return
+      }
+
       // Consolidate style traits
-      const allStyleTraits = samples
-        .map((s) => s.styleAnalysis)
-        .filter(Boolean) as string[]
+      setProcessingPhase('Consolidating style attributes...')
+      const controller = new AbortController()
+      abortControllerRef.current = controller
 
       const consolidateResponse = await fetch('/api/generate/voice-dna/consolidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           consolidationType: 'style',
-          styleTraits: allStyleTraits,
+          styleTraits: successfulStyleTraits,
         }),
+        signal: controller.signal,
       })
 
       if (!consolidateResponse.ok) {
         throw new Error('Failed to consolidate style traits')
       }
 
-      const reader = consolidateResponse.body?.getReader()
-      if (!reader) throw new Error('No response stream')
+      const consolidateResult = await readStreamWithTimeout(
+        consolidateResponse,
+        TIMEOUT_MS,
+        controller.signal,
+        setConsolidatedStyle
+      )
 
-      let consolidated = ''
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        consolidated += decoder.decode(value, { stream: true })
-        setConsolidatedStyle(consolidated)
+      if (!consolidateResult.success) {
+        throw new Error(consolidateResult.error || 'Failed to consolidate style traits')
       }
 
+      setProcessingPhase('')
       setCurrentStep('generate')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed')
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Analysis was cancelled')
+      } else {
+        setError(err instanceof Error ? err.message : 'Analysis failed')
+      }
     } finally {
       setIsProcessing(false)
+      setProcessingPhase('')
+      abortControllerRef.current = null
     }
   }
 
@@ -355,7 +548,7 @@ export default function VoiceDNAGeneratorPage() {
 
   const canProceed =
     currentStep === 'upload'
-      ? samples.length >= 3
+      ? samples.length >= 1
       : currentStep === 'voice'
         ? !!consolidatedVoice
         : currentStep === 'style'
@@ -425,9 +618,91 @@ export default function VoiceDNAGeneratorPage() {
       {error && (
         <Card className="border-destructive">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </div>
+              {failedSamples.length > 0 && !isProcessing && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setError('')
+                      setFailedSamples([])
+                      if (currentStep === 'upload' || currentStep === 'voice') {
+                        analyzeVoice()
+                      } else {
+                        analyzeStyle()
+                      }
+                    }}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Retry All
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Processing Progress */}
+      {isProcessing && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium">Analysis Progress</h4>
+                <Button variant="ghost" size="sm" onClick={cancelAnalysis}>
+                  Cancel
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {samples.map((sample, idx) => (
+                  <div
+                    key={sample.id}
+                    className={cn(
+                      'p-3 rounded-lg border transition-all',
+                      idx === processingIndex && 'border-primary bg-primary/5',
+                      idx < processingIndex && !sample.analysisError && 'border-green-500/50 bg-green-500/5',
+                      sample.analysisError && 'border-destructive/50 bg-destructive/5'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      {sample.analysisError ? (
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                      ) : idx < processingIndex ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : idx === processingIndex ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                      )}
+                      <span className="text-sm font-medium">
+                        Sample {idx + 1}: {sample.name}
+                      </span>
+                    </div>
+                    {idx === processingIndex && processingPhase && (
+                      <p className="text-xs text-muted-foreground mt-1 ml-6">
+                        {processingPhase}
+                      </p>
+                    )}
+                    {sample.analysisError && (
+                      <p className="text-xs text-destructive mt-1 ml-6">
+                        {sample.analysisError}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {processingIndex >= samples.length && processingPhase && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {processingPhase}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -439,8 +714,8 @@ export default function VoiceDNAGeneratorPage() {
           <CardHeader>
             <CardTitle>Step 1: Upload Writing Samples</CardTitle>
             <CardDescription>
-              Add 3-5 samples of writing that represent the target voice. Use content
-              that shows off the unique style - newsletters, emails, blog posts, etc.
+              Add 1-5 samples of writing that represent the target voice. More samples
+              improve accuracy. Use newsletters, emails, blog posts, etc.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

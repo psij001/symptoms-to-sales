@@ -253,7 +253,7 @@ export const VOICE_DNA_STEPS = [
   {
     id: 'upload',
     name: 'Upload Samples',
-    description: 'Add 3-5 writing samples that represent the target voice',
+    description: 'Add 1-5 writing samples that represent the target voice',
   },
   {
     id: 'voice',

@@ -12,12 +12,6 @@ import { cn } from '@/lib/utils'
 
 type Step = 1 | 2 | 3
 
-interface TriangleResult {
-  symptom: string
-  wisdom: string
-  metaphor: string
-}
-
 export default function TriangleOfInsightPage() {
   // Input state
   const [audience, setAudience] = useState('')
@@ -38,7 +32,6 @@ export default function TriangleOfInsightPage() {
 
   // UI state
   const [isGenerating, setIsGenerating] = useState(false)
-  const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -67,7 +60,6 @@ export default function TriangleOfInsightPage() {
 
     setIsGenerating(true)
     setError(null)
-    setStreamingContent('')
     setSymptoms([])
 
     try {
@@ -91,10 +83,13 @@ export default function TriangleOfInsightPage() {
 
         const chunk = decoder.decode(value)
         fullText += chunk
-        setStreamingContent(fullText)
+
+        // Parse incrementally and update state as new items appear
+        const currentParsed = parseNumberedList(fullText)
+        setSymptoms(currentParsed)
       }
 
-      // Parse the final content
+      // Final parse
       const parsed = parseNumberedList(fullText)
       setSymptoms(parsed)
     } catch (err) {
@@ -113,8 +108,8 @@ export default function TriangleOfInsightPage() {
 
     setIsGenerating(true)
     setError(null)
-    setStreamingContent('')
     setWisdoms([])
+    setStep(2)
 
     try {
       const response = await fetch('/api/generate/triangle/wisdom', {
@@ -141,12 +136,14 @@ export default function TriangleOfInsightPage() {
 
         const chunk = decoder.decode(value)
         fullText += chunk
-        setStreamingContent(fullText)
+
+        // Parse incrementally
+        const currentParsed = parseNumberedList(fullText)
+        setWisdoms(currentParsed)
       }
 
       const parsed = parseNumberedList(fullText)
       setWisdoms(parsed)
-      setStep(2)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate wisdom')
     } finally {
@@ -163,8 +160,8 @@ export default function TriangleOfInsightPage() {
 
     setIsGenerating(true)
     setError(null)
-    setStreamingContent('')
     setMetaphors([])
+    setStep(3)
 
     try {
       const response = await fetch('/api/generate/triangle/metaphor', {
@@ -192,12 +189,14 @@ export default function TriangleOfInsightPage() {
 
         const chunk = decoder.decode(value)
         fullText += chunk
-        setStreamingContent(fullText)
+
+        // Parse incrementally
+        const currentParsed = parseNumberedList(fullText)
+        setMetaphors(currentParsed)
       }
 
       const parsed = parseNumberedList(fullText)
       setMetaphors(parsed)
-      setStep(3)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate metaphors')
     } finally {
@@ -234,16 +233,12 @@ ${selectedMetaphor}`
     setSelectedSymptom(null)
     setSelectedWisdom(null)
     setSelectedMetaphor(null)
-    setStreamingContent('')
     setError(null)
   }
 
-  // Check if we have a complete result
-  const hasCompleteResult = selectedSymptom && selectedWisdom && selectedMetaphor
-
   return (
     <div className="tool-layout h-[calc(100vh-3.5rem)]">
-      {/* Input Panel */}
+      {/* Input Panel - Left */}
       <div className="border-r border-border p-6 overflow-y-auto">
         <div className="space-y-6">
           {/* Header */}
@@ -273,7 +268,7 @@ ${selectedMetaphor}`
           <Separator />
 
           {/* Step 1: Initial Input */}
-          {step === 1 && symptoms.length === 0 && (
+          {step === 1 && symptoms.length === 0 && !isGenerating && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="audience">Target Audience</Label>
@@ -306,23 +301,14 @@ ${selectedMetaphor}`
                 disabled={isGenerating || !audience.trim() || !problem.trim()}
                 className="w-full bg-accent text-accent-foreground hover:bg-accent-hover"
               >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    Generate Symptoms
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
+                Generate Symptoms
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           )}
 
-          {/* Symptom Selection */}
-          {step === 1 && symptoms.length > 0 && (
+          {/* Symptom Selection - Step 1 */}
+          {step === 1 && (symptoms.length > 0 || isGenerating) && (
             <SelectionList
               title="Select Your Symptom"
               description="Choose the one that resonates most with your audience"
@@ -332,11 +318,12 @@ ${selectedMetaphor}`
               onNext={generateWisdom}
               isGenerating={isGenerating}
               icon={<Triangle className="h-4 w-4" />}
+              error={error}
             />
           )}
 
-          {/* Wisdom Selection */}
-          {step === 2 && wisdoms.length > 0 && (
+          {/* Wisdom Selection - Step 2 */}
+          {step === 2 && (
             <SelectionList
               title="Select Your Wisdom"
               description="Choose the insight that creates the biggest shift"
@@ -347,11 +334,12 @@ ${selectedMetaphor}`
               onBack={() => setStep(1)}
               isGenerating={isGenerating}
               icon={<Lightbulb className="h-4 w-4" />}
+              error={error}
             />
           )}
 
-          {/* Metaphor Selection */}
-          {step === 3 && metaphors.length > 0 && (
+          {/* Metaphor Selection - Step 3 */}
+          {step === 3 && (
             <SelectionList
               title="Select Your Metaphor"
               description="Choose the one that makes the wisdom click"
@@ -362,99 +350,24 @@ ${selectedMetaphor}`
               isGenerating={isGenerating}
               icon={<Sparkles className="h-4 w-4" />}
               isFinal
+              error={error}
             />
           )}
         </div>
       </div>
 
-      {/* Output Panel - 60% */}
+      {/* Living Canvas - Right Panel */}
       <div className="p-6 overflow-y-auto bg-background-elevated">
-        {/* Streaming Content */}
-        {isGenerating && streamingContent && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-text-secondary">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Generating...</span>
-            </div>
-            <div className="prose-generated whitespace-pre-wrap">
-              {streamingContent}
-              <span className="inline-block w-0.5 h-5 bg-accent animate-typing-cursor ml-0.5" />
-            </div>
-          </div>
-        )}
-
-        {/* Final Result */}
-        {!isGenerating && hasCompleteResult && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <h2 className="text-h2">Your Triangle of Insight</h2>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={copyResult}>
-                  {copied ? (
-                    <>
-                      <Check className="mr-1 h-4 w-4 text-success" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="mr-1 h-4 w-4" />
-                      Copy All
-                    </>
-                  )}
-                </Button>
-                <Button variant="outline" size="sm" onClick={reset}>
-                  Start Over
-                </Button>
-              </div>
-            </div>
-
-            <Card className="border-l-4 border-l-project-personal">
-              <CardContent className="p-4 space-y-1">
-                <div className="flex items-center gap-2 text-text-secondary text-sm font-medium">
-                  <Triangle className="h-4 w-4" />
-                  SYMPTOM
-                </div>
-                <p className="prose-generated">{selectedSymptom}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-project-partner">
-              <CardContent className="p-4 space-y-1">
-                <div className="flex items-center gap-2 text-text-secondary text-sm font-medium">
-                  <Lightbulb className="h-4 w-4" />
-                  WISDOM
-                </div>
-                <p className="prose-generated">{selectedWisdom}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-project-client">
-              <CardContent className="p-4 space-y-1">
-                <div className="flex items-center gap-2 text-text-secondary text-sm font-medium">
-                  <Sparkles className="h-4 w-4" />
-                  METAPHOR
-                </div>
-                <p className="prose-generated">{selectedMetaphor}</p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!isGenerating && !hasCompleteResult && !streamingContent && (
-          <div className="h-full flex items-center justify-center text-center">
-            <div className="space-y-4 max-w-md">
-              <div className="mx-auto w-12 h-12 rounded-full bg-surface flex items-center justify-center">
-                <Triangle className="h-6 w-6 text-accent" />
-              </div>
-              <h3 className="text-h2">Build Your Triangle</h3>
-              <p className="text-text-secondary">
-                Enter your audience and their biggest problem to generate
-                powerful Triangle of Insight components.
-              </p>
-            </div>
-          </div>
-        )}
+        <TriangleCanvas
+          symptom={selectedSymptom}
+          wisdom={selectedWisdom}
+          metaphor={selectedMetaphor}
+          currentStep={step}
+          isGenerating={isGenerating}
+          onCopy={copyResult}
+          onReset={reset}
+          copied={copied}
+        />
       </div>
     </div>
   )
@@ -497,6 +410,160 @@ function StepIndicator({
   )
 }
 
+// Triangle Canvas - Living Document on Right Panel
+function TriangleCanvas({
+  symptom,
+  wisdom,
+  metaphor,
+  currentStep,
+  isGenerating,
+  onCopy,
+  onReset,
+  copied,
+}: {
+  symptom: string | null
+  wisdom: string | null
+  metaphor: string | null
+  currentStep: Step
+  isGenerating: boolean
+  onCopy: () => void
+  onReset: () => void
+  copied: boolean
+}) {
+  const isComplete = symptom && wisdom && metaphor
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Triangle className="h-5 w-5 text-accent" />
+          <h2 className="text-h2">Your Triangle</h2>
+        </div>
+        {isComplete && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onCopy}>
+              {copied ? (
+                <>
+                  <Check className="mr-1 h-4 w-4 text-success" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-1 h-4 w-4" />
+                  Copy All
+                </>
+              )}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onReset}>
+              Start Over
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Symptom Slot */}
+      <TriangleSlot
+        label="SYMPTOM"
+        icon={<Triangle className="h-4 w-4" />}
+        value={symptom}
+        color="border-l-project-personal"
+        placeholder="Select a symptom from the options"
+        isActive={currentStep === 1}
+        isGenerating={isGenerating && currentStep === 1}
+      />
+
+      {/* Wisdom Slot */}
+      <TriangleSlot
+        label="WISDOM"
+        icon={<Lightbulb className="h-4 w-4" />}
+        value={wisdom}
+        color="border-l-project-partner"
+        placeholder={symptom ? "Select wisdom from the options" : "Complete symptom first"}
+        isActive={currentStep === 2}
+        isGenerating={isGenerating && currentStep === 2}
+        isLocked={!symptom}
+      />
+
+      {/* Metaphor Slot */}
+      <TriangleSlot
+        label="METAPHOR"
+        icon={<Sparkles className="h-4 w-4" />}
+        value={metaphor}
+        color="border-l-project-client"
+        placeholder={wisdom ? "Select metaphor from the options" : "Complete wisdom first"}
+        isActive={currentStep === 3}
+        isGenerating={isGenerating && currentStep === 3}
+        isLocked={!wisdom}
+      />
+    </div>
+  )
+}
+
+// Triangle Slot Component - Individual slot in the canvas
+function TriangleSlot({
+  label,
+  icon,
+  value,
+  color,
+  placeholder,
+  isActive,
+  isGenerating,
+  isLocked,
+}: {
+  label: string
+  icon: React.ReactNode
+  value: string | null
+  color: string
+  placeholder: string
+  isActive?: boolean
+  isGenerating?: boolean
+  isLocked?: boolean
+}) {
+  if (value) {
+    // Filled state - show the selected value
+    return (
+      <Card className={cn("border-l-4 transition-all", color)}>
+        <CardContent className="p-4 space-y-1">
+          <div className="flex items-center gap-2 text-text-secondary text-sm font-medium">
+            {icon}
+            {label}
+          </div>
+          <p className="prose-generated">{value}</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Empty/placeholder state
+  return (
+    <Card
+      className={cn(
+        "border-l-4 border-dashed transition-all",
+        isLocked && "opacity-50",
+        isActive && !isLocked ? "border-accent/50 bg-accent/5" : "border-border"
+      )}
+    >
+      <CardContent className="p-4 space-y-1">
+        <div className="flex items-center gap-2 text-text-tertiary text-sm font-medium">
+          {icon}
+          {label}
+        </div>
+        <p className="text-sm text-text-tertiary">
+          {isGenerating ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Generating options...
+            </span>
+          ) : (
+            placeholder
+          )}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
 // Selection List Component
 function SelectionList({
   title,
@@ -509,6 +576,7 @@ function SelectionList({
   isGenerating,
   icon,
   isFinal,
+  error,
 }: {
   title: string
   description: string
@@ -520,6 +588,7 @@ function SelectionList({
   isGenerating: boolean
   icon: React.ReactNode
   isFinal?: boolean
+  error?: string | null
 }) {
   return (
     <div className="space-y-4">
@@ -531,17 +600,27 @@ function SelectionList({
         <p className="text-sm text-text-secondary">{description}</p>
       </div>
 
+      {/* Loading state while generating */}
+      {isGenerating && items.length === 0 && (
+        <div className="flex items-center gap-2 text-text-secondary py-4">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Generating options...</span>
+        </div>
+      )}
+
+      {/* Options list with staggered animation */}
       <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
         {items.map((item, index) => (
           <button
             key={index}
             onClick={() => onSelect(item)}
             className={cn(
-              'w-full text-left p-3 rounded-lg border transition-colors',
+              'w-full text-left p-3 rounded-lg border transition-all animate-fade-in',
               selected === item
                 ? 'border-accent bg-accent/10'
                 : 'border-border hover:border-border-hover bg-background-elevated'
             )}
+            style={{ animationDelay: `${index * 50}ms` }}
           >
             <div className="flex items-start gap-3">
               <div
@@ -560,8 +639,17 @@ function SelectionList({
         ))}
       </div>
 
+      {/* Still generating indicator */}
+      {isGenerating && items.length > 0 && (
+        <div className="flex items-center gap-2 text-text-tertiary text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Loading more options...</span>
+        </div>
+      )}
+
       {error && <p className="text-sm text-error">{error}</p>}
 
+      {/* Navigation buttons */}
       <div className="flex gap-2">
         {onBack && (
           <Button variant="outline" onClick={onBack} disabled={isGenerating}>
@@ -601,6 +689,3 @@ function SelectionList({
     </div>
   )
 }
-
-// Need error variable in scope
-let error: string | null = null
